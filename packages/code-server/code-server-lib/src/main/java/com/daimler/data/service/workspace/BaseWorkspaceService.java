@@ -42,6 +42,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.ObjectUtils;
 
 import com.daimler.data.application.client.CodeServerClient;
 import com.daimler.data.application.client.GitClient;
@@ -280,14 +281,41 @@ public class BaseWorkspaceService implements WorkspaceService {
 		try {
 			
 			CodeServerWorkspaceNsql entity = workspaceAssembler.toEntity(vo);
+			String repoName = "";
+			String repoNameWithOrg = "";
+			List<UserInfoVO> collabs = new ArrayList<>();
+			boolean isOwner = false;
+			List<CodeServerWorkspaceNsql> entities = new ArrayList<>();
+			String projectName = vo.getProjectDetails().getProjectName();
+			if(vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("public") || vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("private")
+					|| vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("bat")) {
+				repoName = vo.getProjectDetails().getRecipeDetails().getRepodetails();
+				repoNameWithOrg =  vo.getProjectDetails().getRecipeDetails().getRepodetails();
+			}
+			else {
+				repoName = vo.getProjectDetails().getGitRepoName();
+				repoNameWithOrg =  gitOrgUri + gitOrgName + "/" + repoName;
+			}
+			UserInfoVO projectOwner = vo.getProjectDetails().getProjectOwner();
+			UserInfoVO workspaceOwner = vo.getWorkspaceOwner();
+			String projectOwnerId = "";
 			
 			//validate user pat 
 			if (!vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase()
-					.equalsIgnoreCase("default")) {
+					.equalsIgnoreCase("default") && !vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("public")) {
 				HttpStatus validateUserPatstatus = gitClient.validateGitPat(entity.getData().getGitUserName(), pat);
 				if (!validateUserPatstatus.is2xxSuccessful()) {
 					MessageDescription errMsg = new MessageDescription(
 							"Invalid GitHub Personal Access Token provided. Please verify and retry.");
+					errors.add(errMsg);
+					responseVO.setErrors(errors);
+					return responseVO;
+				}
+			}
+			else {
+				HttpStatus publicGitPatStatus = gitClient.validatePublicGitPat(entity.getData().getGitUserName(), pat, repoName);
+				if(!publicGitPatStatus.is2xxSuccessful()) {
+					MessageDescription errMsg = new MessageDescription("Invalid Personal Access Token. Please verify and retry");
 					errors.add(errMsg);
 					responseVO.setErrors(errors);
 					return responseVO;
@@ -299,15 +327,20 @@ public class BaseWorkspaceService implements WorkspaceService {
 			 WorkbenchManageInputDto ownerWorkbenchCreateInputsDto = new WorkbenchManageInputDto();
 			 ownerWorkbenchCreateInputsDto.setAction(ConstantsUtility.CREATEACTION);
 			 ownerWorkbenchCreateInputsDto.setEnvironment(entity.getData().getProjectDetails().getRecipeDetails().getEnvironment());
-			 ownerWorkbenchCreateInputsDto.setIsCollaborator("true");
+			 if(Objects.nonNull(projectOwner) && Objects.nonNull(workspaceOwner) && projectOwner.getId().equalsIgnoreCase(workspaceOwner.getId())) {
+				 ownerWorkbenchCreateInputsDto.setIsCollaborator("false");
+				 isOwner = true;
+				 projectOwnerId = projectOwner.getId();
+			 }
+			 else {
+				 ownerWorkbenchCreateInputsDto.setIsCollaborator("true");
+			 }			 
 			 ownerWorkbenchCreateInputsDto.setPat(pat);
-			 String repoName = entity.getData().getProjectDetails().getGitRepoName();
-			 String repoNameWithOrg =  gitOrgUri + gitOrgName + "/" + repoName;
 			 ownerWorkbenchCreateInputsDto.setRepo(repoNameWithOrg);
 			 ownerWorkbenchCreateInputsDto.setShortid(entity.getData().getWorkspaceOwner().getId());
 			 ownerWorkbenchCreateInputsDto.setType(client.toDeployType(entity.getData().getProjectDetails().getRecipeDetails().getRecipeId()));
 			 ownerWorkbenchCreateInputsDto.setWsid(entity.getData().getWorkspaceId());
-			ownerWorkbenchCreateInputsDto.setResource(vo.getProjectDetails().getRecipeDetails().getResource());
+			 ownerWorkbenchCreateInputsDto.setResource(vo.getProjectDetails().getRecipeDetails().getResource());
 			 ownerWorkbenchCreateDto.setInputs(ownerWorkbenchCreateInputsDto);
 			 
 			 GenericMessage createOwnerWSResponse = client.manageWorkBench(ownerWorkbenchCreateDto);
@@ -316,7 +349,7 @@ public class BaseWorkspaceService implements WorkspaceService {
 						 	(createOwnerWSResponse.getErrors()!=null && !createOwnerWSResponse.getErrors().isEmpty()) ||
 						 	(createOwnerWSResponse.getWarnings()!=null && !createOwnerWSResponse.getWarnings().isEmpty())) {
 					 	
-							MessageDescription errMsg = new MessageDescription("Failed to initialize collaborator workbench while creating individual codespaces, please retry.");
+							MessageDescription errMsg = new MessageDescription("Failed to initialize workbench while creating individual codespaces, please retry.");
 							errors.add(errMsg);
 							errors.addAll(createOwnerWSResponse.getErrors());
 							warnings.addAll(createOwnerWSResponse.getWarnings());
@@ -330,6 +363,46 @@ public class BaseWorkspaceService implements WorkspaceService {
 			 SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS+00:00");
 			 entity.getData().setIntiatedOn(isoFormat.parse(isoFormat.format(new Date())));
 			 entity.getData().setStatus(ConstantsUtility.CREATEREQUESTEDSTATE);
+			 entity.getData().setWorkspaceUrl("");//set url
+			 entity.getData().getProjectDetails().setProjectCreatedOn(isoFormat.parse(isoFormat.format(new Date())));
+				if (isOwner) {
+					if (vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("public")
+							|| vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().equalsIgnoreCase("default")
+							|| vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("bat")) {
+						entity.getData().getProjectDetails().setProjectCollaborators(new ArrayList<>());
+						collabs = new ArrayList<>();
+					}
+					entities.add(entity);
+					if (collabs != null && !collabs.isEmpty()) {
+						for (UserInfoVO collaborator : collabs) {
+							CodeServerWorkspaceNsql collabEntity = new CodeServerWorkspaceNsql();
+							CodeServerWorkspace collabData = new CodeServerWorkspace();
+							collabData.setDescription(entity.getData().getDescription());
+							collabData.setGitUserName(collaborator.getGitUserName());
+							collabData.setIntiatedOn(null);
+							collabData.setProjectDetails(entity.getData().getProjectDetails());
+							collabData.setStatus(ConstantsUtility.COLLABREQUESTEDSTATE);
+							Long collabWsSeqId = jpaRepo.getNextWorkspaceSeqId();
+							String collabWsId = ConstantsUtility.WORKSPACEPREFIX + String.valueOf(collabWsSeqId);
+							collabData.setWorkspaceId(collabWsId);
+							UserInfo collabUser = workspaceAssembler.toUserInfo(collaborator);
+							collabData.setWorkspaceOwner(collabUser);
+							collabData.setWorkspaceUrl("");
+							collabEntity.setId(null);
+							collabEntity.setData(collabData);
+							entities.add(collabEntity);
+						}
+					}
+					jpaRepo.saveAllAndFlush(entities);
+					CodeServerWorkspaceNsql savedOwnerEntity = workspaceCustomRepository.findbyProjectName(projectOwnerId, projectName);
+					CodeServerWorkspaceVO savedOwnerVO = workspaceAssembler.toVo(savedOwnerEntity);
+					responseVO.setErrors(new ArrayList<>());
+					responseVO.setWarnings(errors);
+					responseVO.setSuccess("SUCCESS");
+					responseVO.setData(savedOwnerVO);
+					return responseVO;
+				}
+			 
 			 jpaRepo.save(entity);
 			 responseVO.setData(workspaceAssembler.toVo(entity));
 			 responseVO.setErrors(new ArrayList<>());
@@ -506,7 +579,8 @@ public class BaseWorkspaceService implements WorkspaceService {
 			 ownerEntity.getData().setWorkspaceUrl("");//set url
 			 ownerEntity.getData().getProjectDetails().setProjectCreatedOn(now);
 			 if(vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("public") ||
-				vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().equalsIgnoreCase("default")) {
+				vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().equalsIgnoreCase("default") ||
+				vo.getProjectDetails().getRecipeDetails().getRecipeId().name().toLowerCase().startsWith("bat")) {
 				 ownerEntity.getData().getProjectDetails().setProjectCollaborators(new ArrayList<>());
 				 collabs = new ArrayList<>();
 			 }
@@ -1034,6 +1108,9 @@ public class BaseWorkspaceService implements WorkspaceService {
 				 }
 				 if(quarkusRecipeId.equalsIgnoreCase(projectRecipe)) {
 					 deploymentUrl = codeServerBaseUri+"/"+projectOwnerWsId+"/"+ targetEnv +"/q/swagger-ui";
+				 }
+				 if(micronautRecipeId.equalsIgnoreCase(projectRecipe)) {
+					 deploymentUrl = codeServerBaseUri+"/"+projectOwnerWsId+"/"+ targetEnv +"/swagger-ui/index.html";
 				 }
 				 String environmentJsonbName = "intDeploymentDetails";
 				 CodeServerDeploymentDetails deploymentDetails = new CodeServerDeploymentDetails();
