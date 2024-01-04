@@ -1197,15 +1197,15 @@ public class BaseWorkspaceService implements WorkspaceService {
 				}
 				String projectOwnerWsId = ownerEntity.getData().getWorkspaceId();
 				String deploymentUrl = "";
-				deploymentUrl = codeServerBaseUri + "/" + projectOwnerWsId + "/" + targetEnv + "/api/swagger-ui.html";
+				deploymentUrl = codeServerBaseUri + "/" + projectName + "/" + targetEnv + "/api/swagger-ui.html";
 				if (pythonRecipeId.equalsIgnoreCase(projectRecipe)) {
-					deploymentUrl = codeServerBaseUri + "/" + projectOwnerWsId + "/" + targetEnv + "/api/docs";
+					deploymentUrl = codeServerBaseUri + "/" + projectName + "/" + targetEnv + "/api/docs";
 				}
 				if (reactRecipeId.equalsIgnoreCase(projectRecipe) || angularRecipeId.equalsIgnoreCase(projectRecipe)) {
-					deploymentUrl = codeServerBaseUri + "/" + projectOwnerWsId + "/" + targetEnv + "/";
+					deploymentUrl = codeServerBaseUri + "/" + projectName + "/" + targetEnv + "/";
 				}
 				if (quarkusRecipeId.equalsIgnoreCase(projectRecipe)) {
-					deploymentUrl = codeServerBaseUri + "/" + projectOwnerWsId + "/" + targetEnv + "/q/swagger-ui";
+					deploymentUrl = codeServerBaseUri + "/" + projectName + "/" + targetEnv + "/q/swagger-ui";
 				}
 				String environmentJsonbName = "intDeploymentDetails";
 				CodeServerDeploymentDetails deploymentDetails = new CodeServerDeploymentDetails();
