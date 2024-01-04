@@ -265,6 +265,7 @@ public class AuthenticatorClientImpl  implements AuthenticatorClient{
 	public void callingKongApis(String serviceName, String env, boolean apiRecipe) {
 		boolean kongApiForDeploymentURL = false;
 		String deploymentServiceName = "";
+		String projectName = "";
 		CodeServerWorkspaceNsql workspaceNsql = null;
 		if(serviceName.contains(WORKSPACE_API) && Objects.nonNull(env)) {
 			LOGGER.info("service is : {}",serviceName);	
@@ -280,6 +281,7 @@ public class AuthenticatorClientImpl  implements AuthenticatorClient{
 		}
 		CodeServerDeploymentDetails intDeploymentDetails = workspaceNsql.getData().getProjectDetails().getIntDeploymentDetails();
 		CodeServerDeploymentDetails prodDeploymentDetails = workspaceNsql.getData().getProjectDetails().getProdDeploymentDetails();
+		projectName = workspaceNsql.getData().getProjectDetails().getProjectName();
 		Boolean intSecureIAM = null;
 		Boolean prodSecureIAM = null;
 		if(Objects.nonNull(prodDeploymentDetails)) {
@@ -314,10 +316,10 @@ public class AuthenticatorClientImpl  implements AuthenticatorClient{
 		CreateRouteVO createRouteVO = new CreateRouteVO();
 		if(kongApiForDeploymentURL) {
 			if(Objects.nonNull(intSecureIAM) && intSecureIAM) {
-				paths.add("/" + deploymentServiceName + "/" + "int" + "/api");
+				paths.add("/" + projectName + "/" + "int" + "/api");
 			}
 			if(Objects.nonNull(prodSecureIAM) && prodSecureIAM) {
-				paths.add("/" + deploymentServiceName + "/" + "prod" + "/api");
+				paths.add("/" + projectName + "/" + "prod" + "/api");
 			}
 			if(!(paths.contains(currentPath))) {
 				paths.add(currentPath);
