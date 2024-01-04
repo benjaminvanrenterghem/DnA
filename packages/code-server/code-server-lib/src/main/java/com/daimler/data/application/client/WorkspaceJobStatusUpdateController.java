@@ -22,6 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.daimler.data.auth.client.AuthenticatorClient;
 import com.daimler.data.controller.exceptions.GenericMessage;
 import com.daimler.data.controller.exceptions.MessageDescription;
+import com.daimler.data.db.entities.CodeServerWorkspaceNsql;
+import com.daimler.data.db.json.CodeServerWorkspace;
+import com.daimler.data.db.repo.workspace.WorkspaceCustomRepository;
+import com.daimler.data.db.repo.workspace.WorkspaceRepository;
+import com.daimler.data.util.ConstantsUtility;
 import com.daimler.data.dto.workspace.CodeServerDeploymentDetailsVO;
 import com.daimler.data.dto.workspace.CodeServerProjectDetailsVO;
 import com.daimler.data.dto.workspace.CodeServerWorkspaceVO;
@@ -61,7 +66,10 @@ public class WorkspaceJobStatusUpdateController  {
 	private boolean callKongApisFromBackend;
 	
 	@Autowired
-	private AuthenticatorClient authenticatorClient;		
+	private AuthenticatorClient authenticatorClient;
+
+	@Autowired
+	private WorkspaceRepository jpaRepo;
 	
 	@ApiOperation(value = "Update workspace Project for a given Id.", nickname = "updateWorkspace", notes = "update workspace Project for a given identifier.", response = GenericMessage.class, tags={ "code-server", })
     @ApiResponses(value = { 
@@ -96,6 +104,10 @@ public class WorkspaceJobStatusUpdateController  {
 			log.info("existingStatus  is {}",existingStatus);
 			String latestStatus = updateRequestVO.getStatus().name();
 			log.info("latestStatus  is {}",latestStatus);
+			if(latestStatus.equalsIgnoreCase("CREATED")) {
+				log.info("workspace:{} is in created state", name);
+				service.updateCollaboratorWorkspaceStatus(existingVO);
+			}	
 			UserInfoVO ownerVO = existingVO.getWorkspaceOwner();
 			boolean unauthorized = false; 
 			String owner = ownerVO.getId();
