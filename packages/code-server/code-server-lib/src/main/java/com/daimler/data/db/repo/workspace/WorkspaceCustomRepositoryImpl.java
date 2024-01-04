@@ -58,6 +58,7 @@ import com.daimler.data.db.json.CodeServerLeanGovernanceFeilds;
 import com.daimler.data.db.json.CodeServerWorkspace;
 import com.daimler.data.db.json.CodespaceSecurityConfig;
 import com.daimler.data.db.repo.common.CommonDataRepositoryImpl;
+import javax.persistence.criteria.Expression;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -652,6 +653,30 @@ public class WorkspaceCustomRepositoryImpl extends CommonDataRepositoryImpl<Code
 		}
 		return updateResponse;
 
+	}
+
+	@Override
+	public CodeServerWorkspaceNsql findDataByProjectName(String userId, String projectName) {
+		CriteriaBuilder cb = em.getCriteriaBuilder();
+		CriteriaQuery<CodeServerWorkspaceNsql> cq = cb.createQuery(CodeServerWorkspaceNsql.class);
+		Root<CodeServerWorkspaceNsql> root = cq.from(entityClass);
+		CriteriaQuery<CodeServerWorkspaceNsql> byName = cq.select(root);
+		Predicate con1 = cb.equal(cb.lower(
+				cb.function("jsonb_extract_path_text", String.class, root.get("data"), cb.literal("projectDetails"), cb.literal("projectName"))),
+				projectName.toLowerCase());
+		Predicate con2 = cb.equal(cb.lower(
+				cb.function("jsonb_extract_path_text", String.class, root.get("data"), cb.literal("workspaceOwner"), cb.literal("id"))),
+				userId.toLowerCase());
+		Expression<String> con4 = cb.function("jsonb_extract_path_text", String.class, root.get("data"), cb.literal("status"));
+		Predicate con3 = cb.isNull(con4);
+		Predicate pMain = cb.and(con1, con2, con3);
+		cq.where(pMain);
+		TypedQuery<CodeServerWorkspaceNsql> byNameQuery = em.createQuery(byName);
+		List<CodeServerWorkspaceNsql> entities = byNameQuery.getResultList();
+		if (entities != null && entities.size() > 0)
+			return entities.get(0);
+		else
+			return null;
 	}
 
 }
